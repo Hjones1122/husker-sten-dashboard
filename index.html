@@ -134,7 +134,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--da
     </div>
   </div>
   <div class="header-meta">
-    <div>Built: <strong>Jul 29, 2026 02:01 PM</strong></div>
+    <div>Built: <strong>Jul 29, 2026 02:35 PM</strong></div>
     <div>Phase: <strong>Summer Training</strong></div>
     <div>Latest Data: <strong>2026-07-29</strong></div>
   </div>
@@ -660,6 +660,36 @@ function speedProfile(a, asOf){
 
 function statusColor(s){return{red:'#E41C38',yellow:'#F5A623',green:'#27AE60'}[s]||'#999';}
 
+// Calendar-day grid (not session-based) — one tile per actual calendar day,
+// only highlighted if that day included real sprint exposure (>90% IMV).
+// Off days and non-exposure training days both render as plain/muted tiles.
+function calendarDayTiles(a, asOf, numDays){
+  const end=new Date(asOf+'T12:00:00');
+  const tiles=[];
+  for(let i=numDays-1;i>=0;i--){
+    const d=new Date(end); d.setDate(d.getDate()-i);
+    const dStr=d.toISOString().slice(0,10);
+    const daySessions=a.sessions.filter(s=>s.date===dStr && !s.indoor);
+    const sprintTotal=daySessions.reduce((t,s)=>t+s.SprintCount,0);
+    tiles.push({
+      date:dStr,
+      dateLabel:d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+      sprintTotal,
+      exposed:sprintTotal>0,
+    });
+  }
+  return tiles;
+}
+
+function dayGrid(tiles, large){
+  const tickCls=large?'exp-tick':'exp-tick', missCls=large?'exp-miss':'exp-miss';
+  const wrapCls=large?'exp-cal exp-cal-lg':'exp-cal';
+  return `<div class="${wrapCls}">${tiles.map(t=>{
+    if(t.exposed) return `<div class="${tickCls}" title="${t.dateLabel} — ${t.sprintTotal} sprints">${t.sprintTotal}</div>`;
+    return `<div class="${missCls}" title="${t.dateLabel} — no exposure"></div>`;
+  }).join('')}</div>`;
+}
+
 function expCalendar(sessions, large){
   const cls=large?'exp-tick':'exp-tick', missCls=large?'exp-miss':'exp-miss';
   const wrapCls=large?'exp-cal exp-cal-lg':'exp-cal';
@@ -679,7 +709,7 @@ function renderSpeed(){
       <table class="speed-table">
         <thead><tr>
           <th>Athlete</th><th>Min Grp</th><th>Status</th>
-          <th>Days Since</th><th>Exposure Days (14)</th><th>Last 3 Gaps</th>
+          <th>Days Since</th><th>Exposure — Last 14 Days</th><th>Last 3 Gaps</th>
           <th>Last 14 Sessions</th>
         </tr></thead>
         <tbody>`;
@@ -693,12 +723,13 @@ function renderSpeed(){
     const gapPills=p.last3Gaps.length
       ? p.last3Gaps.map(g=>`<span class="gap-pill">${g}d</span>`).join('')
       : `<span style="color:var(--mid);font-size:11px">—</span>`;
+    const dayTiles=calendarDayTiles(a,SELECTED_DATE,14);
     h+=`<tr>
       <td><strong>#${a.jersey} ${a.name}</strong></td>
       <td>${mgl(a.minGroup)}</td>
       <td><span class="speed-status" style="background:${statusColor(p.status)}">${p.statusLabel}</span></td>
       <td style="font-weight:700;color:${statusColor(p.status)}">${p.daysSince===null?'Never':p.daysSince+'d'}</td>
-      <td>${p.exposureDays} / ${p.last14.length}</td>
+      <td>${dayGrid(dayTiles,false)}</td>
       <td><div class="gap-pills">${gapPills}</div></td>
       <td>${expCalendar(p.last14,false)}</td>
     </tr>`;
@@ -742,6 +773,8 @@ function renderSpeedIndividual(){
   const labels=last20.map(s=>s.mdLabel||s.dateLabel);
   const hsrData=last20.map(s=>s.HSR);
   const sprintData=last20.map(s=>s.SprintCount);
+  const dayTiles14=calendarDayTiles(a,SELECTED_DATE,14);
+  const exposedDayCount=dayTiles14.filter(t=>t.exposed).length;
 
   // HSR:Sprint ratio — descriptive only
   const totalHSR=p.elig.reduce((t,s)=>t+s.HSR,0);
@@ -757,10 +790,16 @@ function renderSpeedIndividual(){
       </div>
       <div class="hero-stats">
         <div class="hero-stat"><div class="hs-val" style="color:${statusColor(p.status)}">${p.daysSince===null?'Never':p.daysSince}</div><div class="hs-lbl">Days Since Exposure</div></div>
-        <div class="hero-stat"><div class="hs-val">${p.exposureDays}/${p.last14.length}</div><div class="hs-lbl">Exposure Days (14)</div></div>
+        <div class="hero-stat"><div class="hs-val">${exposedDayCount}/14</div><div class="hs-lbl">Exposure Days (Last 14 Days)</div></div>
         <div class="hero-stat"><div class="hs-val">${p.avgGap!==null?p.avgGap.toFixed(1):'—'}</div><div class="hs-lbl">Avg Gap (days)</div></div>
         <div class="hero-stat"><div class="hs-val">${ratio}</div><div class="hs-lbl">HSR:Sprint Ratio (m)</div></div>
       </div>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">Exposure — Last 14 Calendar Days</div>
+      ${dayGrid(dayTiles14,true)}
+      <div style="margin-top:10px;font-size:11px;color:var(--mid)">Number = sprint count (≥90% IMV) that day · plain tile = no exposure that day</div>
     </div>
 
     <div class="chart-container">
